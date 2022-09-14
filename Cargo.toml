@@ -1,0 +1,27 @@
+[package]
+name = "celo-zprize"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ark-bls12-377 = "0.3"
+ark-bls12-381 = "0.3"
+ark-ec = { version = "0.3", features = ["parallel"] }
+ark-ed-on-bls12-377 = "0.3"
+ark-ed-on-bls12-381 = "0.3"
+ark-ff = { version = "0.3", features = ["parallel"] }
+ark-poly = "0.3"
+ark-poly-commit = "0.3"
+ark-serialize = "0.3"
+ark-sponge = "0.3"
+ark-std = "0.3"
+duration-string = "0.0.6"
+rand = "0.8.0"
+rand_chacha = "0.3.1"
+thiserror = "1.0.15"
+
+[lib]
+crate-type = ["rlib", "dylib"]
+
+[target.'cfg(target_os="android")'.dependencies]
+jni = { version = "0.5", default-features = false }
