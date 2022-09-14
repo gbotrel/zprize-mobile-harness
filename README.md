@@ -52,6 +52,8 @@ We experimented several approaches; here is a description of the key findings fo
 5. We implemented and optimized a dedicated Squaring algorithm (rather than calling the Multiplication as in `gnark-crypto`) following our previous work https://hackmd.io/@gnark/modular_multiplication , which resulted in significant perf improvement on the target device.
 6. Our GPU experimentations were not promising (on this device).
 
+7. We raised [an issue](https://github.com/golang/go/issues/54607) to the Golang team. Once the fix is merged into the latest Golang compiler release, we believe we can squeeze an extra 5-10% perf improvement.
+
 ---------
 
 Our code also includes some serialization helpers and modification to be compatible with arkworks format. Once the competition is over, the `Mul` and `Square` optimizations for `arm64` will land in `gnark-crypto`.  [Get in touch](gnark@consensys.net) if you have any questions.
