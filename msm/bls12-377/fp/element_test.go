@@ -51,7 +51,7 @@ func BenchmarkElementSetRandom(b *testing.B) {
 func BenchmarkElementSetBytes(b *testing.B) {
 	var x Element
 	x.SetRandom()
-	bb := x.Bytes()
+	bb := x.ZBytes()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -384,8 +384,8 @@ func TestElementBytes(t *testing.T) {
 	properties.Property("SetBytes(Bytes()) should stay constant", prop.ForAll(
 		func(a testPairElement) bool {
 			var b Element
-			bytes := a.element.Bytes()
-			b.UnsafeSetBytes(bytes[:])
+			bytes := a.element.ZBytes()
+			b.ZSetBytes(bytes[:])
 			return a.element.Equal(&b)
 		},
 		genA,

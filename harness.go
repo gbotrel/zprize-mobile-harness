@@ -46,7 +46,7 @@ func benchmarkMSM(outDir string, instances []Instance, nbIterations int) ([]time
 
 			// write result to file
 			tmp.FromJacobian(&instanceResult)
-			buf = tmp.Bytes()
+			buf = tmp.ZBytes()
 			if _, err := fResults.Write(buf[:]); err != nil {
 				return nil, err
 			}
