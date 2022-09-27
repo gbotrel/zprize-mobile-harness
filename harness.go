@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/consensys/gnark-crypto/ecc"
 	bls12377 "github.com/gbotrel/zprize-mobile-harness/msm/bls12-377"
 	"github.com/gbotrel/zprize-mobile-harness/msm/bls12-377/fr"
 	"github.com/icza/gox/timex"
@@ -40,7 +41,7 @@ func benchmarkMSM(outDir string, instances []Instance, nbIterations int) ([]time
 
 		for i := 0; i < nbIterations; i++ {
 			start := time.Now()
-			instanceResult.MultiExp(instance.Points, instance.Scalars, bls12377.BestC(len(instance.Scalars)))
+			instanceResult.MultiExp(instance.Points, instance.Scalars, ecc.MultiExpConfig{})
 			end := time.Since(start)
 			totalDuration += end
 
