@@ -1,4 +1,4 @@
-.PHONY: install run local clean
+.PHONY: install run local clean updatefield
 
 install:
 	GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o gnark . 
@@ -18,3 +18,10 @@ run:
 clean:
 	rm gnark
 	rm *.txt
+
+updatefield:
+	cp ../../consensys/gnark-crypto/ecc/bls12-377/fp/* ./msm/bls12-377/fp/
+	cd ./msm/bls12-377/fp/ && rm *amd64* && rm element_mul.go
+	cp ../../consensys/gnark-crypto/ecc/bls12-377/fr/*.go ./msm/bls12-377/fr/
+	cp ../../consensys/gnark-crypto/ecc/bls12-377/fr/*.s ./msm/bls12-377/fr/
+	cd ./msm/bls12-377/fr/ && rm *amd64* && rm element_mul.go
