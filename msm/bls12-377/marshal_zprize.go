@@ -5,10 +5,18 @@ import (
 	"errors"
 	"io"
 	"os"
+	"runtime"
+	"sync"
 
 	"github.com/gbotrel/zprize-mobile-harness/msm/bls12-377/fp"
 	"github.com/gbotrel/zprize-mobile-harness/msm/bls12-377/fr"
 )
+
+// SizeOfG1AffineCompressed represents the size in bytes that a G1Affine need in binary form, compressed
+const SizeOfG1AffineCompressed = 48
+
+// SizeOfG1AffineUncompressed represents the size in bytes that a G1Affine need in binary form, uncompressed
+const SizeOfG1AffineUncompressed = SizeOfG1AffineCompressed * 2
 
 // Note this follows arkworks little endian serialization format, NOT gnark original
 // it provides util method to read and save test vectors as defined in celo test harness
@@ -281,4 +289,42 @@ func (p *G1Affine) ZSetBytes(buf []byte) (int, error) {
 	}
 
 	return SizeOfG1AffineCompressed, nil
+}
+
+// Execute process in parallel the work function
+func Execute(nbIterations int, work func(int, int), maxCpus ...int) {
+
+	nbTasks := runtime.NumCPU()
+	if len(maxCpus) == 1 {
+		nbTasks = maxCpus[0]
+	}
+	nbIterationsPerCpus := nbIterations / nbTasks
+
+	// more CPUs than tasks: a CPU will work on exactly one iteration
+	if nbIterationsPerCpus < 1 {
+		nbIterationsPerCpus = 1
+		nbTasks = nbIterations
+	}
+
+	var wg sync.WaitGroup
+
+	extraTasks := nbIterations - (nbTasks * nbIterationsPerCpus)
+	extraTasksOffset := 0
+
+	for i := 0; i < nbTasks; i++ {
+		wg.Add(1)
+		_start := i*nbIterationsPerCpus + extraTasksOffset
+		_end := _start + nbIterationsPerCpus
+		if extraTasks > 0 {
+			_end++
+			extraTasks--
+			extraTasksOffset++
+		}
+		go func() {
+			work(_start, _end)
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
 }

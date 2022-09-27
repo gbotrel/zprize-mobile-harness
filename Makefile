@@ -25,3 +25,9 @@ updatefield:
 	cp ../../consensys/gnark-crypto/ecc/bls12-377/fr/*.go ./msm/bls12-377/fr/
 	cp ../../consensys/gnark-crypto/ecc/bls12-377/fr/*.s ./msm/bls12-377/fr/
 	cd ./msm/bls12-377/fr/ && rm *amd64* && rm element_mul.go
+
+updatemsm:
+	cp ../../consensys/gnark-crypto/ecc/bls12-377/g1.go ./msm/bls12-377/
+	cp ../../consensys/gnark-crypto/ecc/bls12-377/multiexp.go ./msm/bls12-377/
+	cp ../../consensys/gnark-crypto/ecc/bls12-377/multiexp_test.go ./msm/bls12-377/
+	cp ../../consensys/gnark-crypto/ecc/bls12-377/g1_test.go ./msm/bls12-377/
