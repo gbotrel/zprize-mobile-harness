@@ -40,6 +40,16 @@ type g1JacExtended struct {
 	X, Y, ZZ, ZZZ fp.Element
 }
 
+// G1EdExtended point in extended coordinates on a twisted Edwards curve
+type G1EdExtended struct {
+	X, Y, Z, T fp.Element
+}
+
+// G1EdCustom point in custom affine coordinates on a twisted Edwards curve
+type G1EdCustom struct {
+	X, Y, T fp.Element
+}
+
 // -------------------------------------------------------------------------------------------------
 // Affine
 
@@ -47,6 +57,13 @@ type g1JacExtended struct {
 func (p *G1Affine) Set(a *G1Affine) *G1Affine {
 	p.X, p.Y = a.X, a.Y
 	return p
+}
+
+// IsZero returns true if p=0 false otherwise
+func (p *G1Affine) IsZero() bool {
+	var one fp.Element
+	one.SetOne()
+	return p.X.IsZero() && p.Y.Equal(&one)
 }
 
 // ScalarMultiplication computes and returns p = a ⋅ s
@@ -93,7 +110,7 @@ func (p *G1Affine) Equal(a *G1Affine) bool {
 	return p.X.Equal(&a.X) && p.Y.Equal(&a.Y)
 }
 
-// Neg computes -G
+// Neg sets p to -a
 func (p *G1Affine) Neg(a *G1Affine) *G1Affine {
 	p.X = a.X
 	p.Y.Neg(&a.Y)
@@ -974,4 +991,350 @@ func BatchScalarMultiplicationG1(base *G1Affine, scalars []fr.Element) []G1Affin
 	})
 	toReturnAff := BatchJacobianToAffineG1(toReturn)
 	return toReturnAff
+}
+
+// -------------------------------------------------------------------------------------------------
+// Extended coordinates (X:Y:Z:T) on twisted Edwards
+
+// FromAffine sets p = Q, p in twisted Edwards (extended), Q in Short Weierstrass (affine)
+func (p *G1EdExtended) FromAffineSW(Q *G1Affine) *G1EdExtended {
+
+	var d1, d2, one fp.Element
+	one.SetOne()
+
+	d1.Mul(&Q.Y, &invSqrtMinusA)
+	d2.Add(&Q.X, &one).
+		Add(&d2, &sqrtThree)
+
+	inv := fp.BatchInvert([]fp.Element{d1, d2})
+
+	p.X.Add(&Q.X, &one).
+		Mul(&p.X, &inv[0])
+	p.Y.Add(&Q.X, &one).
+		Sub(&p.Y, &sqrtThree).
+		Mul(&p.Y, &inv[1])
+
+	p.Z.SetOne()
+
+	p.T.Mul(&p.X, &p.Y)
+
+	return p
+}
+
+// BatchFromAffine sets p_i = Q_i, p_i in twisted Edwards (extended), Q_i in Short Weierstrass (affine)
+// performing a single field inversion (Montgomery batch inversion trick).
+func BatchFromAffineSW(Q []G1Affine) []G1EdExtended {
+
+	p := make([]G1EdExtended, len(Q))
+	d := make([]fp.Element, 2*len(Q))
+
+	var one fp.Element
+	one.SetOne()
+
+	Execute(len(Q), func(start, end int) {
+		for i := start; i < end; i++ {
+			d[i].Mul(&Q[i].Y, &invSqrtMinusA)
+			d[i+len(Q)].Add(&Q[i].X, &one).
+				Add(&d[i+len(Q)], &sqrtThree)
+		}
+	})
+
+	inv := fp.BatchInvert(d)
+
+	Execute(len(Q), func(start, end int) {
+		for i := start; i < end; i++ {
+			p[i].X.Add(&Q[i].X, &one).
+				Mul(&p[i].X, &inv[i])
+			p[i].Y.Add(&Q[i].X, &one).
+				Sub(&p[i].Y, &sqrtThree).
+				Mul(&p[i].Y, &inv[i+len(Q)])
+
+			p[i].Z.SetOne()
+
+			p[i].T.Mul(&p[i].X, &p[i].Y)
+		}
+	})
+
+	return p
+}
+
+func BatchFromAffineSWC(Q []G1Affine) []G1EdCustom {
+
+	p := make([]G1EdCustom, len(Q))
+	d := make([]fp.Element, 2*len(Q))
+
+	var one fp.Element
+	one.SetOne()
+
+	Execute(len(Q), func(start, end int) {
+		for i := start; i < end; i++ {
+			d[i].Mul(&Q[i].Y, &invSqrtMinusA)
+			d[i+len(Q)].Add(&Q[i].X, &one).
+				Add(&d[i+len(Q)], &sqrtThree)
+		}
+	})
+
+	inv := fp.BatchInvert(d)
+
+	Execute(len(Q), func(start, end int) {
+		var x, y, t fp.Element
+		for i := start; i < end; i++ {
+			x.Add(&Q[i].X, &one).
+				Mul(&x, &inv[i])
+			y.Add(&Q[i].X, &one).
+				Sub(&y, &sqrtThree).
+				Mul(&y, &inv[i+len(Q)])
+
+
+			t.Mul(&x, &y).Mul(&t, &dCurveCoeffDouble)
+			p[i].X.Sub(&y, &x)
+			p[i].Y.Add(&y, &x)
+			p[i].T = t 
+		}
+	})
+
+	return p
+}
+
+
+// FromEdExtended converts a point in twisted Edwards from extended affine custom
+func (p *G1EdCustom) FromExtendedEd(q *G1EdExtended) *G1EdCustom {
+	p.X.Sub(&q.Y, &q.X)               // x = y - x
+	p.Y.Add(&q.Y, &q.X)               // x = y + x
+	p.T.Mul(&q.T, &dCurveCoeffDouble) // t = t * (2d)
+
+	return p
+}
+
+// FromEdExtended converts a point in twisted Edwards (extended) to short Weierstrass (affine)
+func (a *G1Affine) FromExtendedEd(p *G1EdExtended) *G1Affine {
+
+	if p.Z.IsZero() {
+		a.X.SetZero()
+		a.Y.SetZero()
+		return a
+	}
+
+	var x, y, one, n, d1, d2, d3 fp.Element
+	one.SetOne()
+
+	d1.Set(&p.Z)
+	d2.Sub(&p.Z, &p.Y)
+	d3.Mul(&p.X, &invSqrtMinusA)
+	inv := fp.BatchInvert([]fp.Element{d1, d2, d3})
+	inv[1].Mul(&inv[1], &p.Z)
+	inv[2].Mul(&inv[2], &p.Z)
+
+	x.Mul(&d2, &inv[0])
+	y.Mul(&p.Y, &inv[0])
+
+	if x.IsZero() && y.IsOne() {
+		a.X.SetZero()
+		a.Y.SetZero()
+		return a
+	}
+
+	if x.IsZero() && y.Neg(&y).IsOne() {
+		a.X.SetString("86221475337656364670217577898297844512131170918304886846628087555573489449446940924989629379857786708146773819392") // -1/3
+		a.Y.SetZero()
+		return a
+	}
+
+	n.Add(&one, &y).
+		Mul(&n, &inv[1]).
+		Mul(&n, &sqrtThree)
+
+	a.X.Sub(&n, &one)
+
+	a.Y.Mul(&n, &inv[2])
+
+	return a
+}
+
+// Set sets p to p1 and return it
+func (p *G1EdExtended) Set(p1 *G1EdExtended) *G1EdExtended {
+	p.X.Set(&p1.X)
+	p.Y.Set(&p1.Y)
+	p.T.Set(&p1.T)
+	p.Z.Set(&p1.Z)
+	return p
+}
+
+// setInfinity sets p to O (0:1:1:0)
+func (p *G1EdExtended) setInfinity() *G1EdExtended {
+	p.X.SetZero()
+	p.Y.SetOne()
+	p.Z.SetOne()
+	p.T.SetZero()
+	return p
+}
+
+// IsZero returns true if p=0 false otherwise
+func (p *G1EdExtended) IsZero() bool {
+	return p.X.IsZero() && p.Y.Equal(&p.Z)
+}
+
+func (p *G1EdExtended) IsInfinity() bool {
+	return p.X.IsZero() && p.Y.IsOne() && p.Z.IsOne() && p.T.IsZero()
+}
+
+// Equal returns true if p=p1 false otherwise
+// If one point is on the affine chart Z=0 it returns false
+func (p *G1EdExtended) Equal(p1 *G1EdExtended) bool {
+	if p.Z.IsZero() || p1.Z.IsZero() {
+		return false
+	}
+	var pAffine, p1Affine G1Affine
+	pAffine.FromExtendedEd(p)
+	p1Affine.FromExtendedEd(p1)
+	return pAffine.Equal(&p1Affine)
+}
+
+// Neg set p to -p1
+func (p *G1EdExtended) Neg(p1 *G1EdExtended) *G1EdExtended {
+	p.Set(p1)
+	p.X.Neg(&p.X)
+	p.T.Neg(&p.T)
+	return p
+}
+
+// UnifiedMixedAdd adds any two points in twisted Edwards extended coordinates when Z2=1
+// adapted from:
+// https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3
+func (p *G1EdExtended) UnifiedMixedAdd(q *G1EdCustom) {
+	if p.IsZero()  {
+		A :=  q.X
+		B :=  q.Y
+	
+		fp.Butterfly(&B, &A)
+	
+		p.X.Double(&A)
+		p.Y.Double(&B)
+		p.T.Mul(&A, &B)
+		p.Z = four
+		return 
+	}
+
+	var C, D fp.Element
+	A := p.X
+	B := p.Y
+
+	C.Mul(&p.T, &q.T)
+	D.Double(&p.Z)
+
+	fp.Butterfly(&D, &C)
+
+	fp.Butterfly(&B, &A)
+
+	A.Mul(&A, &q.X)
+	B.Mul(&B, &q.Y)
+
+	fp.Butterfly(&B, &A)
+
+
+
+
+	p.X.Mul(&A, &C)
+	p.Y.Mul(&D, &B)
+	p.T.Mul(&A, &B)
+	p.Z.Mul(&C, &D)
+
+}
+
+// UnifiedMixedSub subtracts any two points in twisted Edwards extended coordinates when Z2=1
+// adapted from:
+// https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3
+func (p *G1EdExtended) UnifiedMixedSub(q *G1EdCustom) {
+	if p.IsZero()  {
+		A :=  q.Y
+		B :=  q.X
+	
+		fp.Butterfly(&B, &A)
+	
+		p.X.Double(&A)
+		p.Y.Double(&B)
+		p.T.Mul(&A, &B)
+		p.Z = four
+		return 
+	}
+
+	var C, D fp.Element
+	A := p.X
+	B := p.Y
+
+	C.Mul(&p.T, &q.T).
+	Neg(&C)
+D.Double(&p.Z)
+
+fp.Butterfly(&D, &C)
+
+	fp.Butterfly(&B, &A)
+
+	A.Mul(&A, &q.Y)
+	B.Mul(&B, &q.X)
+
+	fp.Butterfly(&B, &A)
+
+
+
+
+	p.X.Mul(&A, &C)
+	p.Y.Mul(&D, &B)
+	p.T.Mul(&A, &B)
+	p.Z.Mul(&C, &D)
+
+}
+
+// UnifiedAdd adds any two points in twisted Edwards extended coordinates
+// https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
+func (p *G1EdExtended) UnifiedAdd(q *G1EdExtended) {
+
+	var A, B, C, D, E, F, G, H, tmp fp.Element
+
+	tmp.Sub(&q.Y, &q.X)
+	A.Sub(&p.Y, &p.X).
+		Mul(&A, &tmp)
+	tmp.Add(&p.Y, &p.X)
+	B.Add(&q.Y, &q.X).
+		Mul(&B, &tmp)
+	C.Mul(&p.T, &q.T).
+		Mul(&C, &dCurveCoeffDouble)
+	D.Mul(&p.Z, &q.Z).
+		Double(&D)
+	E.Sub(&B, &A)
+	F.Sub(&D, &C)
+	G.Add(&D, &C)
+	H.Add(&B, &A)
+
+	p.X.Mul(&E, &F)
+	p.Y.Mul(&G, &H)
+	p.T.Mul(&E, &H)
+	p.Z.Mul(&F, &G)
+
+}
+
+// DedicatedDouble doubles a point in twisted Edwards extended coordinates
+// https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#doubling-dbl-2008-hwcd
+func (p *G1EdExtended) DedicatedDouble(q *G1EdExtended) {
+
+	var A, B, C, D, E, F, G, H fp.Element
+
+	A.Square(&q.X)
+	B.Square(&q.Y)
+	C.Square(&q.Z).
+		Double(&C)
+	D.Neg(&A)
+	E.Add(&q.X, &q.Y).
+		Square(&E).
+		Sub(&E, &A).
+		Sub(&E, &B)
+	G.Add(&D, &B)
+	F.Sub(&G, &C)
+	H.Sub(&D, &B)
+
+	p.X.Mul(&E, &F)
+	p.Y.Mul(&G, &H)
+	p.T.Mul(&H, &E)
+	p.Z.Mul(&F, &G)
+
 }

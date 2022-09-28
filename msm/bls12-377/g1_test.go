@@ -19,6 +19,7 @@ package bls12377
 import (
 	"fmt"
 	"math/big"
+	"reflect"
 	"testing"
 
 	"github.com/gbotrel/zprize-mobile-harness/msm/bls12-377/fp"
@@ -27,6 +28,66 @@ import (
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/prop"
 )
+
+func TestG1EdwardsExtended(t *testing.T) {
+	t.Parallel()
+	parameters := gopter.DefaultTestParameters()
+	if testing.Short() {
+		parameters.MinSuccessfulTests = nbFuzzShort
+	} else {
+		parameters.MinSuccessfulTests = nbFuzz
+	}
+
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("[BLS12-377] check conversion Short Weierstrass affine to/From twisted Edwards extended (Z=1)", prop.ForAll(
+		func(a fp.Element) bool {
+			var g G1Jac
+			var p, _p G1Affine
+			var s big.Int
+			a.ToBigIntRegular(&s)
+			g.ScalarMultiplication(&g1Gen, &s)
+			p.FromJacobian(&g)
+			var q G1EdExtended
+			q.FromAffineSW(&p)
+			_p.FromExtendedEd(&q)
+
+			return p.Equal(&_p)
+
+		},
+		GenFp(),
+	))
+
+	properties.Property("[BLS12-377] Check arithmetic in twisted Edwards extended", prop.ForAll(
+		func(a fp.Element) bool {
+			var g G1Jac
+			var p, p1, p2 G1Affine
+			var s big.Int
+			a.ToBigIntRegular(&s)
+			g.ScalarMultiplication(&g1Gen, &s)
+			p.FromJacobian(&g)
+			var q, q1, q2 G1EdExtended
+			q.FromAffineSW(&p)
+			q1.DedicatedDouble(&q)
+			q1.UnifiedAdd(&q)
+			q2.DedicatedDouble(&q)
+			var _q G1EdCustom
+			_q.FromExtendedEd(&q)
+			q2.UnifiedMixedAdd(&_q)
+			p1.FromExtendedEd(&q1)
+			p2.FromExtendedEd(&q2)
+
+			three := big.NewInt(3)
+			g.ScalarMultiplication(&g, three)
+			p.FromJacobian(&g)
+
+			return p.Equal(&p1) && p.Equal(&p2)
+
+		},
+		GenFp(),
+	))
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
 
 func TestG1AffineIsOnCurve(t *testing.T) {
 	t.Parallel()
@@ -610,13 +671,51 @@ func BenchmarkG1JacExtAdd(b *testing.B) {
 	}
 }
 
-func BenchmarkG1JacExtDouble(b *testing.B) {
-	var a g1JacExtended
-	a.doubleMixed(&g1GenAff)
+func BenchmarkG1EdExtDedicatedDouble(b *testing.B) {
+	var g G1Jac
+	g.Double(&g1Gen)
+	var p G1Affine
+	p.FromJacobian(&g)
+	var q G1EdExtended
+	q.FromAffineSW(&p)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		a.double(&a)
+		q.DedicatedDouble(&q)
+	}
+}
+
+func BenchmarkG1EdExtUnifiedAdd(b *testing.B) {
+	var g G1Jac
+	g.Double(&g1Gen)
+	var p1, p2 G1Affine
+	p1.FromJacobian(&g)
+	p2.FromJacobian(&g1Gen)
+	var q1, q2 G1EdExtended
+	q1.FromAffineSW(&p1)
+	q2.FromAffineSW(&p2)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		q1.UnifiedAdd(&q2)
+	}
+}
+
+func BenchmarkG1EdExtUnifiedMixedAdd(b *testing.B) {
+	var g G1Jac
+	g.Double(&g1Gen)
+	var p1, p2 G1Affine
+	p1.FromJacobian(&g)
+	p2.FromJacobian(&g1Gen)
+	var q1, q2 G1EdExtended
+	q1.FromAffineSW(&p1)
+	q2.FromAffineSW(&p2)
+	var _q2 G1EdCustom
+	_q2.FromExtendedEd(&q2)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		q1.UnifiedMixedAdd(&_q2)
 	}
 }
 
@@ -638,4 +737,26 @@ func fuzzg1JacExtended(p *g1JacExtended, f fp.Element) g1JacExtended {
 	res.ZZ.Mul(&p.ZZ, &ff)
 	res.ZZZ.Mul(&p.ZZZ, &fff)
 	return res
+}
+
+func TestBatchAffineConv(t *testing.T) {
+	var points [5]G1Affine
+
+	points[0] = g1GenAff
+	for i := 1; i < len(points); i++ {
+		points[i].Add(&points[i-1], &points[i-1])
+	}
+
+	var p1, p2 []G1EdExtended
+	p1 = make([]G1EdExtended, 5)
+
+	for i := 0; i < len(points); i++ {
+		p1[i].FromAffineSW(&points[i])
+	}
+
+	p2 = BatchFromAffineSW(points[:])
+
+	if !reflect.DeepEqual(p1, p2) {
+		t.Fatal("invalid batch conversion")
+	}
 }

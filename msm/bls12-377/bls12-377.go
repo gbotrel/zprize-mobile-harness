@@ -35,6 +35,7 @@ var g1Infinity G1Jac
 var loopCounter [64]int8
 
 var thirdRootOneG1 fp.Element
+var four fp.Element
 
 // seed x₀ of the curve
 var xGen big.Int
@@ -42,6 +43,13 @@ var xGen big.Int
 // glvBasis stores R-linearly independent vectors (a,b), (c,d)
 // in ker((u,v) → u+vλ[r]), and their determinant
 var glvBasis ecc.Lattice
+
+// conversion to twisted Edwards form
+// -x²+y² = 1+(-d/a)x²y²
+// a = -2√3+3, d = -2√3-3
+var sqrtThree fp.Element
+var invSqrtMinusA fp.Element
+var dCurveCoeffDouble fp.Element
 
 func init() {
 
@@ -69,4 +77,36 @@ func init() {
 	lambdaGLV.SetString("91893752504881257701523279626832445440", 10) //(x₀²-1)
 	_r := fr.Modulus()
 	ecc.PrecomputeLattice(_r, &lambdaGLV, &glvBasis)
+
+	four.SetUint64(4)
+
+	// conversion to twisted Edwards form
+	// √3
+	sqrtThree = fp.Element{
+		4588006732144632292,
+		14697816095396418986,
+		15095485345557306380,
+		15246065856125797005,
+		14023251964588091418,
+		94960888053355880,
+	}
+	// 1/√-a = 1/√{-2√3+3}
+	invSqrtMinusA = fp.Element{
+		4253980672159819453,
+		10543543389341820547,
+		9740544029435732375,
+		9468753515685554864,
+		16322658805964220949,
+		99169878199756585,
+	}
+	// -d/a = 2*(7+4√3)
+	dCurveCoeffDouble = fp.Element{
+		17459187486984439494,
+		16924566387240380666,
+		1102674864729460645,
+		6167408650503764774,
+		10085461570702649662,
+		105911569874903690,
+	}
+
 }

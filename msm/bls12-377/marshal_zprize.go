@@ -114,7 +114,7 @@ func SerializeResults(points []G1Affine) []byte {
 	return r
 }
 
-func ReadPoints(path string) (points [][]G1Affine, err error) {
+func ReadPoints(path string) (points [][]G1EdCustom, err error) {
 	fPoints, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -144,7 +144,7 @@ func ReadPoints(path string) (points [][]G1Affine, err error) {
 				return
 			}
 		}
-		points = append(points, v)
+		points = append(points, BatchFromAffineSWC(v))
 	}
 }
 

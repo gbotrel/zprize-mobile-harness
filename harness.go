@@ -36,7 +36,7 @@ func benchmarkMSM(outDir string, instances []Instance, nbIterations int) ([]time
 	for vID, instance := range instances {
 
 		var totalDuration time.Duration
-		var instanceResult bls12377.G1Jac
+		var instanceResult bls12377.G1EdExtended
 		var tmp bls12377.G1Affine
 
 		for i := 0; i < nbIterations; i++ {
@@ -46,7 +46,7 @@ func benchmarkMSM(outDir string, instances []Instance, nbIterations int) ([]time
 			totalDuration += end
 
 			// write result to file
-			tmp.FromJacobian(&instanceResult)
+			tmp.FromExtendedEd(&instanceResult)
 			buf = tmp.ZBytes()
 			if _, err := fResults.Write(buf[:]); err != nil {
 				return nil, err
@@ -86,16 +86,15 @@ func mean(times []time.Duration) time.Duration {
 }
 
 type Instance struct {
-	Points  []bls12377.G1Affine
+	Points  []bls12377.G1EdCustom
 	Scalars []fr.Element
 }
 
 func NewRandomInstance(nbElements int) Instance {
 	var r Instance
-	r.Points = make([]bls12377.G1Affine, nbElements)
 	r.Scalars = make([]fr.Element, nbElements)
 
-	randomPoints(r.Points)
+	r.Points = randomPoints(nbElements)
 	randomScalars(r.Scalars)
 
 	return r
@@ -107,7 +106,8 @@ func randomScalars(scalars []fr.Element) {
 	}
 }
 
-func randomPoints(points []bls12377.G1Affine) {
+func randomPoints(nbPoints int) []bls12377.G1EdCustom {
+	points := make([]bls12377.G1Affine, nbPoints)
 	rr := rand.New(rand.NewSource(time.Now().Unix()))
 	var r, bound big.Int
 	bound.SetString("8444461749428370424248824938781546531375899335154063827935233455917409239039", 10)
@@ -122,4 +122,6 @@ func randomPoints(points []bls12377.G1Affine) {
 		}
 		points[i].ScalarMultiplication(&g1Gen, &r)
 	}
+
+	return bls12377.BatchFromAffineSWC(points)
 }

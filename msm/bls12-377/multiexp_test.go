@@ -71,7 +71,7 @@ func TestMultiExpG1(t *testing.T) {
 				copy(samplePointsLarge[i*nbSamples:], samplePoints[:])
 			}
 
-			var r16, splitted1, splitted2 G1Jac
+			var r16, splitted1, splitted2 G1EdExtended
 
 			// mixer ensures that all the words of a fpElement are set
 			var sampleScalars [nbSamples * 13]fr.Element
@@ -83,16 +83,15 @@ func TestMultiExpG1(t *testing.T) {
 			}
 
 			scalars16, _ := partitionScalars(sampleScalars[:], 16, false, runtime.NumCPU())
-			r16.msmC16(samplePoints[:], scalars16, true)
+			r16.msmC16(BatchFromAffineSWC(samplePoints[:]), scalars16, true)
 
-			splitted1.MultiExp(samplePointsLarge[:], sampleScalars[:], ecc.MultiExpConfig{NbTasks: 128})
-			splitted2.MultiExp(samplePointsLarge[:], sampleScalars[:], ecc.MultiExpConfig{NbTasks: 51})
+			splitted1.MultiExp(BatchFromAffineSWC(samplePointsLarge[:]), sampleScalars[:], ecc.MultiExpConfig{NbTasks: 128})
+			splitted2.MultiExp(BatchFromAffineSWC(samplePointsLarge[:]), sampleScalars[:], ecc.MultiExpConfig{NbTasks: 51})
 			return r16.Equal(&splitted1) && r16.Equal(&splitted2)
 		},
 		genScalar,
 	))
 
-	// cRange is generated from template and contains the available parameters for the multiexp window size
 	cRange := []uint64{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 21}
 	if testing.Short() {
 		// test only "odd" and "even" (ie windows size divide word size vs not)
@@ -102,12 +101,12 @@ func TestMultiExpG1(t *testing.T) {
 	properties.Property(fmt.Sprintf("[G1] Multi exponentation (c in %v) should be consistent with sum of square", cRange), prop.ForAll(
 		func(mixer fr.Element) bool {
 
-			var expected G1Jac
+			var expected G1Affine
 
 			// compute expected result with double and add
 			var finalScalar, mixerBigInt big.Int
 			finalScalar.Mul(&scalar, mixer.ToBigIntRegular(&mixerBigInt))
-			expected.ScalarMultiplication(&g1Gen, &finalScalar)
+			expected.ScalarMultiplication(&g1GenAff, &finalScalar)
 
 			// mixer ensures that all the words of a fpElement are set
 			var sampleScalars [nbSamples]fr.Element
@@ -118,13 +117,13 @@ func TestMultiExpG1(t *testing.T) {
 					FromMont()
 			}
 
-			results := make([]G1Jac, len(cRange)+1)
+			results := make([]G1EdExtended, len(cRange)+1)
 			for i, c := range cRange {
 				scalars, _ := partitionScalars(sampleScalars[:], c, false, runtime.NumCPU())
-				msmInnerG1Jac(&results[i], int(c), samplePoints[:], scalars, false)
+				msmInnerg1EdExtended(&results[i], int(c), BatchFromAffineSWC(samplePoints[:]), scalars, false)
 				if c == 16 {
 					// split the first chunk
-					msmInnerG1Jac(&results[len(results)-1], 16, samplePoints[:], scalars, true)
+					msmInnerg1EdExtended(&results[len(results)-1], 16, BatchFromAffineSWC(samplePoints[:]), scalars, true)
 				}
 			}
 			for i := 1; i < len(results); i++ {
@@ -139,7 +138,7 @@ func TestMultiExpG1(t *testing.T) {
 
 	// note : this test is here as we expect to have a different multiExp than the above bucket method
 	// for small number of points
-	properties.Property("[G1] Multi exponentation (<50points) should be consistent with sum of square", prop.ForAll(
+	properties.Property("[G1] Multi exponentation (<50points) should be consistant with sum of square", prop.ForAll(
 		func(mixer fr.Element) bool {
 
 			var g G1Jac
@@ -205,6 +204,27 @@ func BenchmarkMultiExpG1(b *testing.B) {
 }
 
 func BenchmarkMultiExpG1Reference(b *testing.B) {
+	const nbSamples = 1 << 16
+
+	var (
+		samplePoints  [nbSamples]G1EdCustom
+		sampleScalars [nbSamples]fr.Element
+	)
+
+	fillBenchScalars(sampleScalars[:])
+	fillBenchBasesG12(samplePoints[:])
+
+	var testPoint G1EdExtended
+
+	// pp := BatchFromAffineSW(samplePoints[:])
+
+	b.ResetTimer()
+	for j := 0; j < b.N; j++ {
+		testPoint.MultiExp(samplePoints[:], sampleScalars[:], ecc.MultiExpConfig{})
+	}
+}
+
+func BenchmarkMultiExpEdG1Reference(b *testing.B) {
 	const nbSamples = 1 << 20
 
 	var (
@@ -215,11 +235,13 @@ func BenchmarkMultiExpG1Reference(b *testing.B) {
 	fillBenchScalars(sampleScalars[:])
 	fillBenchBasesG1(samplePoints[:])
 
-	var testPoint G1Affine
+	samplePointsEd := BatchFromAffineSWC(samplePoints[:])
+
+	var testPoint G1EdExtended
 
 	b.ResetTimer()
 	for j := 0; j < b.N; j++ {
-		testPoint.MultiExp(samplePoints[:], sampleScalars[:], ecc.MultiExpConfig{})
+		testPoint.MultiExp(samplePointsEd, sampleScalars[:], ecc.MultiExpConfig{})
 	}
 }
 
@@ -272,6 +294,21 @@ func fillBenchBasesG1(samplePoints []G1Affine) {
 	for i := 1; i < len(samplePoints); i++ {
 		samplePoints[i].X.Add(&samplePoints[i-1].X, &one)
 		samplePoints[i].Y.Sub(&samplePoints[i-1].Y, &one)
+	}
+}
+
+func fillBenchBasesG12(samplePoints []G1EdCustom) {
+	samplePoints[0].X.SetRandom()
+	samplePoints[0].Y.SetRandom()
+	samplePoints[0].T.SetRandom()
+
+	one := samplePoints[0].X
+	one.SetOne()
+
+	for i := 1; i < len(samplePoints); i++ {
+		samplePoints[i].X.Add(&samplePoints[i-1].X, &one)
+		samplePoints[i].Y.Sub(&samplePoints[i-1].Y, &one)
+		samplePoints[i].T.Neg(&samplePoints[i-1].T).Add(&samplePoints[i].T, &samplePoints[i].X)
 	}
 }
 
