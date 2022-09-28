@@ -9,9 +9,9 @@ The submission is written in Go, and derived from the [`gnark-crypto`](https://g
 On the target device, for a random bls12377 G1 MSM (n == 2**16), we measure
 
 * ~2309ms for the reference benchmark
-* ~512ms for our submission
+* ~509ms for our submission
 
-(-77.8%).
+(-77.9%).
 
 ## Pre-requisites
 
