@@ -58,13 +58,13 @@ See the Makefile for options to test locally (`make local`) or on the device wit
 
 We experimented several approaches; here is a description of the key findings for the final one.
 
-1. It uses `gnark-crypto/bls12377` package, which out of the box performs very well (> `arkworks`). The MSM algorithm is described in the Go doc of the corresponding method. Additionaly, we introduce a bls12-377 algorithmic optimization; the "bucket/pippenger" method now uses an optimized twisted edwards extended cordinate system, resulting in a significant performance improvement. You can read more about this in [the attached note](). 
+1. It uses `gnark-crypto/bls12377` package, which out of the box performs very well (> `arkworks`). The MSM algorithm is described in [the attached note](msm.pdf) and the Go code is documented. We introduced a bls12-377 algorithmic optimization; the "bucket/pippenger" method now uses an optimized twisted edwards extended cordinate system, resulting in a significant performance improvement (~30% on some target).
 
 2. We perform a static build targetting a 64bit arm linux architecture, which allows without a complicated build procress to run 64bit code on the target device. We copy the output in the armv7 (32bit) destination folder; in a production deployment, Java calling code must at runtime check for the actual CPU architecture and switch to a fallback if it's 32bit (outside of the scope of the challenge). Note that while the submission spawn a process at each msm call, other ways may turn out more efficient (allocate the verifying key on the stack, communicate with the process with unix sockets, ...).
 
 3. We hand tuned the field arithmetic for the Multiplication targetting the `arm64` architecture. Our pure-go version performed better than the arm assembly one, and resulted in a ~20% speed up on some platforms compared to existing version in `gnark-crypto`.
 
-4. We implemented and optimized a dedicated Squaring algorithm (rather than calling the Multiplication as in `gnark-crypto`) following our previous work https://hackmd.io/@gnark/modular_multiplication , which resulted in significant perf improvement on the target device. This is not used in the twisted edwards extended MSM, only in the parameterized Jacobian version which uses Affine points as input (branch: TODO, performance: ~620ms for 2**14).
+4. We implemented and optimized a dedicated Squaring algorithm (rather than calling the Multiplication as in `gnark-crypto`) following our previous work https://hackmd.io/@gnark/modular_multiplication , which resulted in significant perf improvement on the target device. This is not used in the twisted edwards extended MSM, only in the parameterized Jacobian version which uses Affine points as input (branch: buckets/jacobian, performance: ~600ms for 2**16).
 
 5. For the target (arm64) we add ~40lines of arm assembly for a small function (`fp.Butterfly(a, b) -> a = a + b; b = a - b`). The perf impact is ~5%, as it speeds up a bit the `UnifiedMixedAdd` point addition in the buckets (msm). The rest of the submission is compiled from pure Go code;
 
