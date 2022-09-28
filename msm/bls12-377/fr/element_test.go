@@ -110,15 +110,6 @@ func BenchmarkElementInverse(b *testing.B) {
 
 }
 
-func BenchmarkElementButterfly(b *testing.B) {
-	var x Element
-	x.SetRandom()
-	benchResElement.SetRandom()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		Butterfly(&x, &benchResElement)
-	}
-}
 
 func BenchmarkElementExp(b *testing.B) {
 	var x Element
@@ -652,36 +643,6 @@ func TestElementBitLen(t *testing.T) {
 
 }
 
-func TestElementButterflies(t *testing.T) {
-
-	t.Parallel()
-	parameters := gopter.DefaultTestParameters()
-	if testing.Short() {
-		parameters.MinSuccessfulTests = nbFuzzShort
-	} else {
-		parameters.MinSuccessfulTests = nbFuzz
-	}
-
-	properties := gopter.NewProperties(parameters)
-
-	genA := gen()
-
-	properties.Property("butterfly0 == a -b; a +b", prop.ForAll(
-		func(a, b testPairElement) bool {
-			a0, b0 := a.element, b.element
-
-			_butterflyGeneric(&a.element, &b.element)
-			Butterfly(&a0, &b0)
-
-			return a.element.Equal(&a0) && b.element.Equal(&b0)
-		},
-		genA,
-		genA,
-	))
-
-	properties.TestingRun(t, gopter.ConsoleReporter(false))
-
-}
 
 func TestElementLexicographicallyLargest(t *testing.T) {
 	t.Parallel()

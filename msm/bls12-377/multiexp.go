@@ -162,26 +162,11 @@ func partitionScalars(scalars []fr.Element, c uint64, scalarsMont bool, nbTasks 
 	return toReturn, smallValues
 }
 
-// MultiExp implements section 4 of https://eprint.iacr.org/2012/549.pdf
-//
-// This call return an error if len(scalars) != len(points) or if provided config is invalid.
-func (p *G1Affine) MultiExp(points []G1Affine, scalars []fr.Element, config ecc.MultiExpConfig) (*G1Affine, error) {
-	var _p G1EdExtended
-
-	// batch convert point in G1Affine to G1EdExtended
-	pointsEd := BatchFromAffineSWC(points)
-
-	if _, err := _p.MultiExp(pointsEd, scalars, config); err != nil {
-		return nil, err
-	}
-	p.FromExtendedEd(&_p)
-	return p, nil
-}
 
 // MultiExp implements section 4 of https://eprint.iacr.org/2012/549.pdf
 //
 // This call return an error if len(scalars) != len(points) or if provided config is invalid.
-func (p *G1EdExtended) MultiExp(points []G1EdCustom, scalars []fr.Element, config ecc.MultiExpConfig) (*G1EdExtended, error) {
+func (p *G1EdExtended) MultiExp(points []G1EdMSM, scalars []fr.Element, config ecc.MultiExpConfig) (*G1EdExtended, error) {
 	// note:
 	// each of the msmCX method is the same, except for the c constant it declares
 	// duplicating (through template generation) these methods allows to declare the buckets on the stack
@@ -225,7 +210,7 @@ func (p *G1EdExtended) MultiExp(points []G1EdCustom, scalars []fr.Element, confi
 	// we split recursively until nbChunks(c) >= nbTasks,
 	bestC := func(nbPoints int) uint64 {
 		// implemented msmC methods (the c we use must be in this slice)
-		implementedCs := []uint64{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 21}
+		implementedCs := []uint64{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 		var C uint64
 		// approximate cost (in group operations)
 		// cost = bits/c * (nbPoints + 2^{c})
@@ -294,7 +279,23 @@ func (p *G1EdExtended) MultiExp(points []G1EdCustom, scalars []fr.Element, confi
 	return p, nil
 }
 
-func msmInnerg1EdExtended(p *G1EdExtended, c int, points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) {
+// MultiExp implements section 4 of https://eprint.iacr.org/2012/549.pdf
+//
+// This call return an error if len(scalars) != len(points) or if provided config is invalid.
+func (p *G1Affine) MultiExp(points []G1Affine, scalars []fr.Element, config ecc.MultiExpConfig) (*G1Affine, error) {
+	var _p G1EdExtended
+
+	// batch convert point in G1Affine to G1EdExtended
+	pointsEd := BatchFromAffineSWC(points)
+
+	if _, err := _p.MultiExp(pointsEd, scalars, config); err != nil {
+		return nil, err
+	}
+	p.FromExtendedEd(&_p)
+	return p, nil
+}
+
+func msmInnerg1EdExtended(p *G1EdExtended, c int, points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) {
 
 	switch c {
 
@@ -337,12 +338,6 @@ func msmInnerg1EdExtended(p *G1EdExtended, c int, points []G1EdCustom, scalars [
 	case 16:
 		p.msmC16(points, scalars, splitFirstChunk)
 
-	case 20:
-		p.msmC20(points, scalars, splitFirstChunk)
-
-	case 21:
-		p.msmC21(points, scalars, splitFirstChunk)
-
 	default:
 		panic("not implemented")
 	}
@@ -368,7 +363,7 @@ func msmProcessChunkG1Affine(chunk uint64,
 	chRes chan<- G1EdExtended,
 	buckets []G1EdExtended,
 	c uint64,
-	points []G1EdCustom,
+	points []G1EdMSM,
 	scalars []fr.Element) {
 
 	mask := uint64((1 << c) - 1) // low c bits are 1
@@ -433,7 +428,7 @@ func msmProcessChunkG1Affine(chunk uint64,
 
 }
 
-func (p *G1EdExtended) msmC4(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC4(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 4                   // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -450,7 +445,7 @@ func (p *G1EdExtended) msmC4(points []G1EdCustom, scalars []fr.Element, splitFir
 		chChunks[i] = make(chan G1EdExtended, 1)
 	}
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -478,7 +473,7 @@ func (p *G1EdExtended) msmC4(points []G1EdCustom, scalars []fr.Element, splitFir
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC5(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC5(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 5                   // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -497,12 +492,12 @@ func (p *G1EdExtended) msmC5(points []G1EdCustom, scalars []fr.Element, splitFir
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -530,7 +525,7 @@ func (p *G1EdExtended) msmC5(points []G1EdCustom, scalars []fr.Element, splitFir
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC6(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC6(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 6                   // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -549,12 +544,12 @@ func (p *G1EdExtended) msmC6(points []G1EdCustom, scalars []fr.Element, splitFir
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -582,7 +577,7 @@ func (p *G1EdExtended) msmC6(points []G1EdCustom, scalars []fr.Element, splitFir
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC7(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC7(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 7                   // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -601,12 +596,12 @@ func (p *G1EdExtended) msmC7(points []G1EdCustom, scalars []fr.Element, splitFir
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -634,7 +629,7 @@ func (p *G1EdExtended) msmC7(points []G1EdCustom, scalars []fr.Element, splitFir
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC8(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC8(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 8                   // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -651,7 +646,7 @@ func (p *G1EdExtended) msmC8(points []G1EdCustom, scalars []fr.Element, splitFir
 		chChunks[i] = make(chan G1EdExtended, 1)
 	}
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -679,7 +674,7 @@ func (p *G1EdExtended) msmC8(points []G1EdCustom, scalars []fr.Element, splitFir
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC9(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC9(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 9                   // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -698,12 +693,12 @@ func (p *G1EdExtended) msmC9(points []G1EdCustom, scalars []fr.Element, splitFir
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -731,7 +726,7 @@ func (p *G1EdExtended) msmC9(points []G1EdCustom, scalars []fr.Element, splitFir
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC10(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC10(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 10                  // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -750,12 +745,12 @@ func (p *G1EdExtended) msmC10(points []G1EdCustom, scalars []fr.Element, splitFi
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -783,7 +778,7 @@ func (p *G1EdExtended) msmC10(points []G1EdCustom, scalars []fr.Element, splitFi
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC11(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC11(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 11                  // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -802,12 +797,12 @@ func (p *G1EdExtended) msmC11(points []G1EdCustom, scalars []fr.Element, splitFi
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -835,7 +830,7 @@ func (p *G1EdExtended) msmC11(points []G1EdCustom, scalars []fr.Element, splitFi
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC12(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC12(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 12                  // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -854,12 +849,12 @@ func (p *G1EdExtended) msmC12(points []G1EdCustom, scalars []fr.Element, splitFi
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -887,7 +882,7 @@ func (p *G1EdExtended) msmC12(points []G1EdCustom, scalars []fr.Element, splitFi
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC13(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC13(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 13                  // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -906,12 +901,12 @@ func (p *G1EdExtended) msmC13(points []G1EdCustom, scalars []fr.Element, splitFi
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -939,7 +934,7 @@ func (p *G1EdExtended) msmC13(points []G1EdCustom, scalars []fr.Element, splitFi
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC14(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC14(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 14                  // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -958,12 +953,12 @@ func (p *G1EdExtended) msmC14(points []G1EdCustom, scalars []fr.Element, splitFi
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -991,7 +986,7 @@ func (p *G1EdExtended) msmC14(points []G1EdCustom, scalars []fr.Element, splitFi
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC15(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC15(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 15                  // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -1010,12 +1005,12 @@ func (p *G1EdExtended) msmC15(points []G1EdCustom, scalars []fr.Element, splitFi
 
 	// c doesn't divide 256, last window is smaller we can allocate less buckets
 	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
+	go func(j uint64, points []G1EdMSM, scalars []fr.Element) {
 		var buckets [1 << (lastC - 1)]G1EdExtended
 		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
 	}(uint64(nbChunks), points, scalars)
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}
@@ -1043,7 +1038,7 @@ func (p *G1EdExtended) msmC15(points []G1EdCustom, scalars []fr.Element, splitFi
 	return msmReduceChunkG1Affine(p, c, chChunks[:])
 }
 
-func (p *G1EdExtended) msmC16(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
+func (p *G1EdExtended) msmC16(points []G1EdMSM, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
 	const (
 		c        = 16                  // scalars partitioned into c-bit radixes
 		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
@@ -1060,111 +1055,7 @@ func (p *G1EdExtended) msmC16(points []G1EdCustom, scalars []fr.Element, splitFi
 		chChunks[i] = make(chan G1EdExtended, 1)
 	}
 
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
-		var buckets [1 << (c - 1)]G1EdExtended
-		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
-	}
-
-	for j := int(nbChunks - 1); j > 0; j-- {
-		go processChunk(j, points, scalars, chChunks[j])
-	}
-
-	if !splitFirstChunk {
-		go processChunk(0, points, scalars, chChunks[0])
-	} else {
-		chSplit := make(chan G1EdExtended, 2)
-		split := len(points) / 2
-		go processChunk(0, points[:split], scalars[:split], chSplit)
-		go processChunk(0, points[split:], scalars[split:], chSplit)
-		go func() {
-			s1 := <-chSplit
-			s2 := <-chSplit
-			close(chSplit)
-			s1.UnifiedAdd(&s2)
-			chChunks[0] <- s1
-		}()
-	}
-
-	return msmReduceChunkG1Affine(p, c, chChunks[:])
-}
-
-func (p *G1EdExtended) msmC20(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
-	const (
-		c        = 20                  // scalars partitioned into c-bit radixes
-		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
-	)
-
-	// for each chunk, spawn one go routine that'll loop through all the scalars in the
-	// corresponding bit-window
-	// note that buckets is an array allocated on the stack (for most sizes of c) and this is
-	// critical for performance
-
-	// each go routine sends its result in chChunks[i] channel
-	var chChunks [nbChunks + 1]chan G1EdExtended
-	for i := 0; i < len(chChunks); i++ {
-		chChunks[i] = make(chan G1EdExtended, 1)
-	}
-
-	// c doesn't divide 256, last window is smaller we can allocate less buckets
-	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
-		var buckets [1 << (lastC - 1)]G1EdExtended
-		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
-	}(uint64(nbChunks), points, scalars)
-
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
-		var buckets [1 << (c - 1)]G1EdExtended
-		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
-	}
-
-	for j := int(nbChunks - 1); j > 0; j-- {
-		go processChunk(j, points, scalars, chChunks[j])
-	}
-
-	if !splitFirstChunk {
-		go processChunk(0, points, scalars, chChunks[0])
-	} else {
-		chSplit := make(chan G1EdExtended, 2)
-		split := len(points) / 2
-		go processChunk(0, points[:split], scalars[:split], chSplit)
-		go processChunk(0, points[split:], scalars[split:], chSplit)
-		go func() {
-			s1 := <-chSplit
-			s2 := <-chSplit
-			close(chSplit)
-			s1.UnifiedAdd(&s2)
-			chChunks[0] <- s1
-		}()
-	}
-
-	return msmReduceChunkG1Affine(p, c, chChunks[:])
-}
-
-func (p *G1EdExtended) msmC21(points []G1EdCustom, scalars []fr.Element, splitFirstChunk bool) *G1EdExtended {
-	const (
-		c        = 21                  // scalars partitioned into c-bit radixes
-		nbChunks = (fr.Limbs * 64 / c) // number of c-bit radixes in a scalar
-	)
-
-	// for each chunk, spawn one go routine that'll loop through all the scalars in the
-	// corresponding bit-window
-	// note that buckets is an array allocated on the stack (for most sizes of c) and this is
-	// critical for performance
-
-	// each go routine sends its result in chChunks[i] channel
-	var chChunks [nbChunks + 1]chan G1EdExtended
-	for i := 0; i < len(chChunks); i++ {
-		chChunks[i] = make(chan G1EdExtended, 1)
-	}
-
-	// c doesn't divide 256, last window is smaller we can allocate less buckets
-	const lastC = (fr.Limbs * 64) - (c * (fr.Limbs * 64 / c))
-	go func(j uint64, points []G1EdCustom, scalars []fr.Element) {
-		var buckets [1 << (lastC - 1)]G1EdExtended
-		msmProcessChunkG1Affine(j, chChunks[j], buckets[:], c, points, scalars)
-	}(uint64(nbChunks), points, scalars)
-
-	processChunk := func(j int, points []G1EdCustom, scalars []fr.Element, chChunk chan G1EdExtended) {
+	processChunk := func(j int, points []G1EdMSM, scalars []fr.Element, chChunk chan G1EdExtended) {
 		var buckets [1 << (c - 1)]G1EdExtended
 		msmProcessChunkG1Affine(uint64(j), chChunk, buckets[:], c, points, scalars)
 	}

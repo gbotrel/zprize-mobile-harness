@@ -44,13 +44,6 @@ func MulBy13(x *Element) {
 
 // TODO @gbotrel arm64 is defined in asm, butn ot all target will work, need to update build tags
 
-// Butterfly sets
-//
-//	a = a + b (mod q)
-//	b = a - b (mod q)
-//
-//go:noescape
-func Butterfly(a, b *Element)
 
 func fromMont(z *Element) {
 	_fromMontGeneric(z)

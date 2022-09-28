@@ -35,18 +35,13 @@ type G1Jac struct {
 	X, Y, Z fp.Element
 }
 
-// g1JacExtended parameterized Jacobian coordinates (x=X/ZZ, y=Y/ZZZ, ZZ³=ZZZ²)
-type g1JacExtended struct {
-	X, Y, ZZ, ZZZ fp.Element
-}
-
 // G1EdExtended point in extended coordinates on a twisted Edwards curve (x=X/Z, y=Y/Z, x*y=T/Z)
 type G1EdExtended struct {
 	X, Y, Z, T fp.Element
 }
 
-// G1EdCustom point in custom affine coordinates on a twisted Edwards curve (y-x=X, y+x=Y, 2d*x*y=T)
-type G1EdCustom struct {
+// G1EdMSM point in custom affine coordinates on a twisted Edwards curve (y-x=X, y+x=Y, 2d*x*y=T)
+type G1EdMSM struct {
 	X, Y, T fp.Element
 }
 
@@ -536,306 +531,6 @@ func (p *G1Jac) ClearCofactor(a *G1Jac) *G1Jac {
 
 }
 
-// -------------------------------------------------------------------------------------------------
-// Jacobian extended
-
-// Set sets p to the provided point
-func (p *g1JacExtended) Set(a *g1JacExtended) *g1JacExtended {
-	p.X, p.Y, p.ZZ, p.ZZZ = a.X, a.Y, a.ZZ, a.ZZZ
-	return p
-}
-
-// setInfinity sets p to O
-func (p *g1JacExtended) setInfinity() *g1JacExtended {
-	p.X.SetOne()
-	p.Y.SetOne()
-	p.ZZ = fp.Element{}
-	p.ZZZ = fp.Element{}
-	return p
-}
-
-// fromJacExtended sets Q in affine coordinates
-func (p *G1Affine) fromJacExtended(Q *g1JacExtended) *G1Affine {
-	if Q.ZZ.IsZero() {
-		p.X = fp.Element{}
-		p.Y = fp.Element{}
-		return p
-	}
-	p.X.Inverse(&Q.ZZ).Mul(&p.X, &Q.X)
-	p.Y.Inverse(&Q.ZZZ).Mul(&p.Y, &Q.Y)
-	return p
-}
-
-// fromJacExtended sets Q in Jacobian coordinates
-func (p *G1Jac) fromJacExtended(Q *g1JacExtended) *G1Jac {
-	if Q.ZZ.IsZero() {
-		p.Set(&g1Infinity)
-		return p
-	}
-	p.X.Mul(&Q.ZZ, &Q.X).Mul(&p.X, &Q.ZZ)
-	p.Y.Mul(&Q.ZZZ, &Q.Y).Mul(&p.Y, &Q.ZZZ)
-	p.Z.Set(&Q.ZZZ)
-	return p
-}
-
-// unsafeFromJacExtended sets p in Jacobian coordinates, but don't check for infinity
-func (p *G1Jac) unsafeFromJacExtended(Q *g1JacExtended) *G1Jac {
-	p.X.Square(&Q.ZZ).Mul(&p.X, &Q.X)
-	p.Y.Square(&Q.ZZZ).Mul(&p.Y, &Q.Y)
-	p.Z = Q.ZZZ
-	return p
-}
-
-// add point in Jacobian extended coordinates
-// https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-add-2008-s
-func (p *g1JacExtended) add(q *g1JacExtended) *g1JacExtended {
-	//if q is infinity return p
-	if q.ZZ.IsZero() {
-		return p
-	}
-	// p is infinity, return q
-	if p.ZZ.IsZero() {
-		p.Set(q)
-		return p
-	}
-
-	var A, B, X1ZZ2, X2ZZ1, Y1ZZZ2, Y2ZZZ1 fp.Element
-
-	// p2: q, p1: p
-	X2ZZ1.Mul(&q.X, &p.ZZ)
-	X1ZZ2.Mul(&p.X, &q.ZZ)
-	A.Sub(&X2ZZ1, &X1ZZ2)
-	Y2ZZZ1.Mul(&q.Y, &p.ZZZ)
-	Y1ZZZ2.Mul(&p.Y, &q.ZZZ)
-	B.Sub(&Y2ZZZ1, &Y1ZZZ2)
-
-	if A.IsZero() {
-		if B.IsZero() {
-			return p.double(q)
-
-		}
-		p.ZZ = fp.Element{}
-		p.ZZZ = fp.Element{}
-		return p
-	}
-
-	var U1, U2, S1, S2, P, R, PP, PPP, Q, V fp.Element
-	U1.Mul(&p.X, &q.ZZ)
-	U2.Mul(&q.X, &p.ZZ)
-	S1.Mul(&p.Y, &q.ZZZ)
-	S2.Mul(&q.Y, &p.ZZZ)
-	P.Sub(&U2, &U1)
-	R.Sub(&S2, &S1)
-	PP.Square(&P)
-	PPP.Mul(&P, &PP)
-	Q.Mul(&U1, &PP)
-	V.Mul(&S1, &PPP)
-
-	p.X.Square(&R).
-		Sub(&p.X, &PPP).
-		Sub(&p.X, &Q).
-		Sub(&p.X, &Q)
-	p.Y.Sub(&Q, &p.X).
-		Mul(&p.Y, &R).
-		Sub(&p.Y, &V)
-	p.ZZ.Mul(&p.ZZ, &q.ZZ).
-		Mul(&p.ZZ, &PP)
-	p.ZZZ.Mul(&p.ZZZ, &q.ZZZ).
-		Mul(&p.ZZZ, &PPP)
-
-	return p
-}
-
-// double point in Jacobian extended coordinates
-// http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-dbl-2008-s-1
-func (p *g1JacExtended) double(q *g1JacExtended) *g1JacExtended {
-	var U, V, W, S, XX, M fp.Element
-
-	U.Double(&q.Y)
-	V.Square(&U)
-	W.Mul(&U, &V)
-	S.Mul(&q.X, &V)
-	XX.Square(&q.X)
-	M.Double(&XX).
-		Add(&M, &XX) // -> + a, but a=0 here
-	U.Mul(&W, &q.Y)
-
-	p.X.Square(&M).
-		Sub(&p.X, &S).
-		Sub(&p.X, &S)
-	p.Y.Sub(&S, &p.X).
-		Mul(&p.Y, &M).
-		Sub(&p.Y, &U)
-	p.ZZ.Mul(&V, &q.ZZ)
-	p.ZZZ.Mul(&W, &q.ZZZ)
-
-	return p
-}
-
-// subMixed same as addMixed, but will negate a.Y
-// http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-madd-2008-s
-func (p *g1JacExtended) subMixed(a *G1Affine) *g1JacExtended {
-
-	//if a is infinity return p
-	if a.IsInfinity() {
-		return p
-	}
-	// p is infinity, return a
-	if p.ZZ.IsZero() {
-		p.X = a.X
-		p.Y.Neg(&a.Y)
-		p.ZZ.SetOne()
-		p.ZZZ.SetOne()
-		return p
-	}
-
-	var P, R fp.Element
-
-	// p2: a, p1: p
-	P.Mul(&a.X, &p.ZZ)
-	P.Sub(&P, &p.X)
-
-	R.Mul(&a.Y, &p.ZZZ)
-	R.Neg(&R)
-	R.Sub(&R, &p.Y)
-
-	if P.IsZero() {
-		if R.IsZero() {
-			return p.doubleNegMixed(a)
-
-		}
-		p.ZZ = fp.Element{}
-		p.ZZZ = fp.Element{}
-		return p
-	}
-
-	var PP, PPP, Q, Q2, RR, X3, Y3 fp.Element
-
-	PP.Square(&P)
-	PPP.Mul(&P, &PP)
-	Q.Mul(&p.X, &PP)
-	RR.Square(&R)
-	X3.Sub(&RR, &PPP)
-	Q2.Double(&Q)
-	p.X.Sub(&X3, &Q2)
-	Y3.Sub(&Q, &p.X).Mul(&Y3, &R)
-	R.Mul(&p.Y, &PPP)
-	p.Y.Sub(&Y3, &R)
-	p.ZZ.Mul(&p.ZZ, &PP)
-	p.ZZZ.Mul(&p.ZZZ, &PPP)
-
-	return p
-
-}
-
-// addMixed
-// http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-madd-2008-s
-func (p *g1JacExtended) addMixed(a *G1Affine) *g1JacExtended {
-
-	//if a is infinity return p
-	if a.IsInfinity() {
-		return p
-	}
-	// p is infinity, return a
-	if p.ZZ.IsZero() {
-		p.X = a.X
-		p.Y = a.Y
-		p.ZZ.SetOne()
-		p.ZZZ.SetOne()
-		return p
-	}
-
-	var P, R fp.Element
-
-	// p2: a, p1: p
-	P.Mul(&a.X, &p.ZZ)
-	P.Sub(&P, &p.X)
-
-	R.Mul(&a.Y, &p.ZZZ)
-	R.Sub(&R, &p.Y)
-
-	if P.IsZero() {
-		if R.IsZero() {
-			return p.doubleMixed(a)
-
-		}
-		p.ZZ = fp.Element{}
-		p.ZZZ = fp.Element{}
-		return p
-	}
-
-	var PP, PPP, Q, Q2, RR, X3, Y3 fp.Element
-
-	PP.Square(&P)
-	PPP.Mul(&P, &PP)
-	Q.Mul(&p.X, &PP)
-	RR.Square(&R)
-	X3.Sub(&RR, &PPP)
-	Q2.Double(&Q)
-	p.X.Sub(&X3, &Q2)
-	Y3.Sub(&Q, &p.X).Mul(&Y3, &R)
-	R.Mul(&p.Y, &PPP)
-	p.Y.Sub(&Y3, &R)
-	p.ZZ.Mul(&p.ZZ, &PP)
-	p.ZZZ.Mul(&p.ZZZ, &PPP)
-
-	return p
-
-}
-
-// doubleNegMixed same as double, but will negate q.Y
-func (p *g1JacExtended) doubleNegMixed(q *G1Affine) *g1JacExtended {
-
-	var U, V, W, S, XX, M, S2, L fp.Element
-
-	U.Double(&q.Y)
-	U.Neg(&U)
-	V.Square(&U)
-	W.Mul(&U, &V)
-	S.Mul(&q.X, &V)
-	XX.Square(&q.X)
-	M.Double(&XX).
-		Add(&M, &XX) // -> + a, but a=0 here
-	S2.Double(&S)
-	L.Mul(&W, &q.Y)
-
-	p.X.Square(&M).
-		Sub(&p.X, &S2)
-	p.Y.Sub(&S, &p.X).
-		Mul(&p.Y, &M).
-		Add(&p.Y, &L)
-	p.ZZ.Set(&V)
-	p.ZZZ.Set(&W)
-
-	return p
-}
-
-// doubleMixed point in Jacobian extended coordinates
-// http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-dbl-2008-s-1
-func (p *g1JacExtended) doubleMixed(q *G1Affine) *g1JacExtended {
-
-	var U, V, W, S, XX, M, S2, L fp.Element
-
-	U.Double(&q.Y)
-	V.Square(&U)
-	W.Mul(&U, &V)
-	S.Mul(&q.X, &V)
-	XX.Square(&q.X)
-	M.Double(&XX).
-		Add(&M, &XX) // -> + a, but a=0 here
-	S2.Double(&S)
-	L.Mul(&W, &q.Y)
-
-	p.X.Square(&M).
-		Sub(&p.X, &S2)
-	p.Y.Sub(&S, &p.X).
-		Mul(&p.Y, &M).
-		Sub(&p.Y, &L)
-	p.ZZ.Set(&V)
-	p.ZZZ.Set(&W)
-
-	return p
-}
 
 // BatchJacobianToAffineG1 converts points in Jacobian coordinates to Affine coordinates
 // performing a single field inversion (Montgomery batch inversion trick).
@@ -1060,9 +755,9 @@ func BatchFromAffineSW(a []G1Affine) []G1EdExtended {
 
 // BatchFromAffineSWC converts a_i from affine short Weierstrass to custom twisted Edwards
 // performing a single field inversion (Montgomery batch inversion trick).
-func BatchFromAffineSWC(a []G1Affine) []G1EdCustom {
+func BatchFromAffineSWC(a []G1Affine) []G1EdMSM {
 
-	p := make([]G1EdCustom, len(a))
+	p := make([]G1EdMSM, len(a))
 	d := make([]fp.Element, 2*len(a))
 
 	var one fp.Element
@@ -1098,7 +793,7 @@ func BatchFromAffineSWC(a []G1Affine) []G1EdCustom {
 }
 
 // FromEdExtended converts a point in twisted Edwards from extended (Z=1) to custom coordinates
-func (p *G1EdCustom) FromExtendedEd(q *G1EdExtended) *G1EdCustom {
+func (p *G1EdMSM) FromExtendedEd(q *G1EdExtended) *G1EdMSM {
 	p.X.Sub(&q.Y, &q.X)               // x = y - x
 	p.Y.Add(&q.Y, &q.X)               // x = y + x
 	p.T.Mul(&q.T, &dCurveCoeffDouble) // t = t * (2d)
@@ -1197,7 +892,7 @@ func (p *G1EdExtended) Neg(q *G1EdExtended) *G1EdExtended {
 // UnifiedMixedAdd adds any two points (p+q) in twisted Edwards extended coordinates when q.Z=1
 // adapted from (re-madd):
 // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3
-func (p *G1EdExtended) UnifiedMixedAdd(q *G1EdCustom) {
+func (p *G1EdExtended) UnifiedMixedAdd(q *G1EdMSM) {
 	if p.IsInfinity() {
 		A := q.X
 		B := q.Y
@@ -1237,7 +932,7 @@ func (p *G1EdExtended) UnifiedMixedAdd(q *G1EdCustom) {
 // UnifiedMixedSub subtracts any two points (p-q) in twisted Edwards extended coordinates when q.Z=1
 // adapted from (re-madd):
 // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3
-func (p *G1EdExtended) UnifiedMixedSub(q *G1EdCustom) {
+func (p *G1EdExtended) UnifiedMixedSub(q *G1EdMSM) {
 	if p.IsInfinity() {
 		A := q.Y
 		B := q.X

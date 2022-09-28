@@ -114,7 +114,7 @@ func SerializeResults(points []G1Affine) []byte {
 	return r
 }
 
-func ReadPoints(path string) (points [][]G1EdCustom, err error) {
+func ReadPoints(path string) (points [][]G1EdMSM, err error) {
 	fPoints, err := os.Open(path)
 	if err != nil {
 		return nil, err

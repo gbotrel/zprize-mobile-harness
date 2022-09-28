@@ -71,7 +71,7 @@ func TestG1EdwardsExtended(t *testing.T) {
 			q1.DedicatedDouble(&q)
 			q1.UnifiedAdd(&q)
 			q2.DedicatedDouble(&q)
-			var _q G1EdCustom
+			var _q G1EdMSM
 			_q.FromExtendedEd(&q)
 			q2.UnifiedMixedAdd(&_q)
 			p1.FromExtendedEd(&q1)
@@ -159,21 +159,7 @@ func TestG1AffineConversions(t *testing.T) {
 		GenFp(),
 	))
 
-	properties.Property("[BLS12-377] Affine representation should be independent of a Extended Jacobian representative", prop.ForAll(
-		func(a fp.Element) bool {
-			var g g1JacExtended
-			g.X.Set(&g1Gen.X)
-			g.Y.Set(&g1Gen.Y)
-			g.ZZ.Set(&g1Gen.Z)
-			g.ZZZ.Set(&g1Gen.Z)
-			gfuzz := fuzzg1JacExtended(&g, a)
 
-			var op1 G1Affine
-			op1.fromJacExtended(&gfuzz)
-			return op1.X.Equal(&g1Gen.X) && op1.Y.Equal(&g1Gen.Y)
-		},
-		GenFp(),
-	))
 
 	properties.Property("[BLS12-377] Jacobian representation should be the same as the affine representative", prop.ForAll(
 		func(a fp.Element) bool {
@@ -205,30 +191,8 @@ func TestG1AffineConversions(t *testing.T) {
 		},
 	))
 
-	properties.Property("[BLS12-377] Converting infinity in extended Jacobian to affine should output infinity symbol in Affine", prop.ForAll(
-		func() bool {
-			var g G1Affine
-			var op1 g1JacExtended
-			var zero fp.Element
-			op1.X.Set(&g1Gen.X)
-			op1.Y.Set(&g1Gen.Y)
-			g.fromJacExtended(&op1)
-			return g.X.Equal(&zero) && g.Y.Equal(&zero)
-		},
-	))
 
-	properties.Property("[BLS12-377] Converting infinity in extended Jacobian to Jacobian should output infinity in Jacobian", prop.ForAll(
-		func() bool {
-			var g G1Jac
-			var op1 g1JacExtended
-			var zero, one fp.Element
-			one.SetOne()
-			op1.X.Set(&g1Gen.X)
-			op1.Y.Set(&g1Gen.Y)
-			g.fromJacExtended(&op1)
-			return g.X.Equal(&one) && g.Y.Equal(&one) && g.Z.Equal(&zero)
-		},
-	))
+
 
 	properties.Property("[BLS12-377] [Jacobian] Two representatives of the same class should be equal", prop.ForAll(
 		func(a, b fp.Element) bool {
@@ -302,43 +266,7 @@ func TestG1AffineOps(t *testing.T) {
 		GenFp(),
 	))
 
-	properties.Property("[BLS12-377] [Jacobian Extended] addMixed (-G) should equal subMixed(G)", prop.ForAll(
-		func(a fp.Element) bool {
-			fop1 := fuzzG1Jac(&g1Gen, a)
-			var p1, p1Neg G1Affine
-			p1.FromJacobian(&fop1)
-			p1Neg = p1
-			p1Neg.Y.Neg(&p1Neg.Y)
-			var o1, o2 g1JacExtended
-			o1.addMixed(&p1Neg)
-			o2.subMixed(&p1)
-
-			return o1.X.Equal(&o2.X) &&
-				o1.Y.Equal(&o2.Y) &&
-				o1.ZZ.Equal(&o2.ZZ) &&
-				o1.ZZZ.Equal(&o2.ZZZ)
-		},
-		GenFp(),
-	))
-
-	properties.Property("[BLS12-377] [Jacobian Extended] doubleMixed (-G) should equal doubleNegMixed(G)", prop.ForAll(
-		func(a fp.Element) bool {
-			fop1 := fuzzG1Jac(&g1Gen, a)
-			var p1, p1Neg G1Affine
-			p1.FromJacobian(&fop1)
-			p1Neg = p1
-			p1Neg.Y.Neg(&p1Neg.Y)
-			var o1, o2 g1JacExtended
-			o1.doubleMixed(&p1Neg)
-			o2.doubleNegMixed(&p1)
-
-			return o1.X.Equal(&o2.X) &&
-				o1.Y.Equal(&o2.Y) &&
-				o1.ZZ.Equal(&o2.ZZ) &&
-				o1.ZZZ.Equal(&o2.ZZZ)
-		},
-		GenFp(),
-	))
+	
 
 	properties.Property("[BLS12-377] [Jacobian] Addmix the negation to itself should output 0", prop.ForAll(
 		func(a fp.Element) bool {
@@ -612,65 +540,6 @@ func BenchmarkG1JacDouble(b *testing.B) {
 
 }
 
-func BenchmarkG1JacExtAddMixed(b *testing.B) {
-	var a g1JacExtended
-	a.doubleMixed(&g1GenAff)
-
-	var c G1Affine
-	c.FromJacobian(&g1Gen)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		a.addMixed(&c)
-	}
-}
-
-func BenchmarkG1JacExtSubMixed(b *testing.B) {
-	var a g1JacExtended
-	a.doubleMixed(&g1GenAff)
-
-	var c G1Affine
-	c.FromJacobian(&g1Gen)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		a.subMixed(&c)
-	}
-}
-
-func BenchmarkG1JacExtDoubleMixed(b *testing.B) {
-	var a g1JacExtended
-	a.doubleMixed(&g1GenAff)
-
-	var c G1Affine
-	c.FromJacobian(&g1Gen)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		a.doubleMixed(&c)
-	}
-}
-
-func BenchmarkG1JacExtDoubleNegMixed(b *testing.B) {
-	var a g1JacExtended
-	a.doubleMixed(&g1GenAff)
-
-	var c G1Affine
-	c.FromJacobian(&g1Gen)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		a.doubleNegMixed(&c)
-	}
-}
-
-func BenchmarkG1JacExtAdd(b *testing.B) {
-	var a, c g1JacExtended
-	a.doubleMixed(&g1GenAff)
-	c.double(&a)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		a.add(&c)
-	}
-}
-
 func BenchmarkG1EdExtDedicatedDouble(b *testing.B) {
 	var g G1Jac
 	g.Double(&g1Gen)
@@ -710,7 +579,7 @@ func BenchmarkG1EdExtUnifiedMixedAdd(b *testing.B) {
 	var q1, q2 G1EdExtended
 	q1.FromAffineSW(&p1)
 	q2.FromAffineSW(&p2)
-	var _q2 G1EdCustom
+	var _q2 G1EdMSM
 	_q2.FromExtendedEd(&q2)
 
 	b.ResetTimer()
@@ -727,17 +596,6 @@ func fuzzG1Jac(p *G1Jac, f fp.Element) G1Jac {
 	return res
 }
 
-func fuzzg1JacExtended(p *g1JacExtended, f fp.Element) g1JacExtended {
-	var res g1JacExtended
-	var ff, fff fp.Element
-	ff.Square(&f)
-	fff.Mul(&ff, &f)
-	res.X.Mul(&p.X, &ff)
-	res.Y.Mul(&p.Y, &fff)
-	res.ZZ.Mul(&p.ZZ, &ff)
-	res.ZZZ.Mul(&p.ZZZ, &fff)
-	return res
-}
 
 func TestBatchAffineConv(t *testing.T) {
 	var points [5]G1Affine

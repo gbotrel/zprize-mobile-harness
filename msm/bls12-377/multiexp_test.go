@@ -208,7 +208,7 @@ func BenchmarkMultiExpG1Reference1(b *testing.B) {
 	const nbSamples = 1 << 16
 
 	var (
-		samplePoints  [nbSamples]G1EdCustom
+		samplePoints  [nbSamples]G1EdMSM
 		sampleScalars [nbSamples]fr.Element
 	)
 
@@ -228,7 +228,7 @@ func BenchmarkMultiExpG1Reference2(b *testing.B) {
 	const nbSamples = 1 << 16
 
 	var (
-		samplePoints  [nbSamples]G1EdCustom
+		samplePoints  [nbSamples]G1EdMSM
 		sampleScalars [nbSamples]fr.Element
 	)
 
@@ -317,7 +317,7 @@ func fillBenchBasesG1(samplePoints []G1Affine) {
 	}
 }
 
-func fillBenchBasesG12(samplePoints []G1EdCustom) {
+func fillBenchBasesG12(samplePoints []G1EdMSM) {
 	samplePoints[0].X.SetRandom()
 	samplePoints[0].Y.SetRandom()
 	samplePoints[0].T.SetRandom()

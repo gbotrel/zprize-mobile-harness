@@ -86,7 +86,7 @@ func mean(times []time.Duration) time.Duration {
 }
 
 type Instance struct {
-	Points  []bls12377.G1EdCustom
+	Points  []bls12377.G1EdMSM
 	Scalars []fr.Element
 }
 
@@ -106,7 +106,7 @@ func randomScalars(scalars []fr.Element) {
 	}
 }
 
-func randomPoints(nbPoints int) []bls12377.G1EdCustom {
+func randomPoints(nbPoints int) []bls12377.G1EdMSM {
 	points := make([]bls12377.G1Affine, nbPoints)
 	rr := rand.New(rand.NewSource(time.Now().Unix()))
 	var r, bound big.Int
