@@ -203,7 +203,8 @@ func BenchmarkMultiExpG1(b *testing.B) {
 	}
 }
 
-func BenchmarkMultiExpG1Reference(b *testing.B) {
+func BenchmarkMultiExpG1Reference1(b *testing.B) {
+	// G1EdExtended <- MSM(G1EdCustom[:])
 	const nbSamples = 1 << 16
 
 	var (
@@ -216,16 +217,37 @@ func BenchmarkMultiExpG1Reference(b *testing.B) {
 
 	var testPoint G1EdExtended
 
-	// pp := BatchFromAffineSW(samplePoints[:])
-
 	b.ResetTimer()
 	for j := 0; j < b.N; j++ {
 		testPoint.MultiExp(samplePoints[:], sampleScalars[:], ecc.MultiExpConfig{})
 	}
 }
 
-func BenchmarkMultiExpEdG1Reference(b *testing.B) {
-	const nbSamples = 1 << 20
+func BenchmarkMultiExpG1Reference2(b *testing.B) {
+	// G1Affine <- MSM(G1EdCustom[:])
+	const nbSamples = 1 << 16
+
+	var (
+		samplePoints  [nbSamples]G1EdCustom
+		sampleScalars [nbSamples]fr.Element
+	)
+
+	fillBenchScalars(sampleScalars[:])
+	fillBenchBasesG12(samplePoints[:])
+
+	var testPoint G1EdExtended
+	var testPointAff G1Affine
+
+	b.ResetTimer()
+	for j := 0; j < b.N; j++ {
+		testPoint.MultiExp(samplePoints[:], sampleScalars[:], ecc.MultiExpConfig{})
+		testPointAff.FromExtendedEd(&testPoint)
+	}
+}
+
+func BenchmarkMultiExpG1Reference3(b *testing.B) {
+	// G1Affine <- MSM(G1Affine[:])
+	const nbSamples = 1 << 16
 
 	var (
 		samplePoints  [nbSamples]G1Affine
@@ -235,13 +257,11 @@ func BenchmarkMultiExpEdG1Reference(b *testing.B) {
 	fillBenchScalars(sampleScalars[:])
 	fillBenchBasesG1(samplePoints[:])
 
-	samplePointsEd := BatchFromAffineSWC(samplePoints[:])
-
-	var testPoint G1EdExtended
+	var testPoint G1Affine
 
 	b.ResetTimer()
 	for j := 0; j < b.N; j++ {
-		testPoint.MultiExp(samplePointsEd, sampleScalars[:], ecc.MultiExpConfig{})
+		testPoint.MultiExp(samplePoints[:], sampleScalars[:], ecc.MultiExpConfig{})
 	}
 }
 
@@ -311,7 +331,6 @@ func fillBenchBasesG12(samplePoints []G1EdCustom) {
 		samplePoints[i].T.Neg(&samplePoints[i-1].T).Add(&samplePoints[i].T, &samplePoints[i].X)
 	}
 }
-
 
 func fillBenchScalars(sampleScalars []fr.Element) {
 	// ensure every words of the scalars are filled

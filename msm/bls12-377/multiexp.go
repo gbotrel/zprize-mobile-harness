@@ -19,6 +19,7 @@ package bls12377
 import (
 	"errors"
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/gbotrel/zprize-mobile-harness/msm/bls12-377/fp"
 	"github.com/gbotrel/zprize-mobile-harness/msm/bls12-377/fr"
 	"math"
 	"runtime"
@@ -167,7 +168,7 @@ func partitionScalars(scalars []fr.Element, c uint64, scalarsMont bool, nbTasks 
 func (p *G1Affine) MultiExp(points []G1Affine, scalars []fr.Element, config ecc.MultiExpConfig) (*G1Affine, error) {
 	var _p G1EdExtended
 
-	// batch convert point in G1Affine to g1EdExtended
+	// batch convert point in G1Affine to G1EdExtended
 	pointsEd := BatchFromAffineSWC(points)
 
 	if _, err := _p.MultiExp(pointsEd, scalars, config); err != nil {
@@ -243,7 +244,7 @@ func (p *G1EdExtended) MultiExp(points []G1EdCustom, scalars []fr.Element, confi
 		// if C > 16 && nbPoints < 1 << 23 {
 		// 	C = 16
 		// }
-		return C
+		return C 
 	}
 
 	var C uint64
@@ -400,7 +401,7 @@ func msmProcessChunkG1Affine(chunk uint64,
 			continue
 		}
 
-		// var customPoint g1EdCustom
+		// var customPoint G1EdCustom
 		// customPoint.FromExtendedEd(&points[i])
 
 		// if msbWindow bit is set, we need to substract
@@ -419,11 +420,13 @@ func msmProcessChunkG1Affine(chunk uint64,
 	var runningSum, total G1EdExtended
 	runningSum.setInfinity()
 	total.setInfinity()
+	var aux fp.Element // 0
 	for k := len(buckets) - 1; k >= 0; k-- {
-		if !buckets[k].IsZero() {
-			runningSum.UnifiedAdd(&buckets[k])
+		if !buckets[k].IsInfinity() {
+			runningSum.UnifiedReAdd(&buckets[k], &runningSum, &aux)
+			aux.Mul(&runningSum.T, &dCurveCoeffDouble)
 		}
-		total.UnifiedAdd(&runningSum)
+		total.UnifiedReAdd(&total, &runningSum, &aux)
 	}
 
 	chRes <- total
