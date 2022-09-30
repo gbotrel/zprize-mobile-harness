@@ -159,8 +159,6 @@ func TestG1AffineConversions(t *testing.T) {
 		GenFp(),
 	))
 
-
-
 	properties.Property("[BLS12-377] Jacobian representation should be the same as the affine representative", prop.ForAll(
 		func(a fp.Element) bool {
 			var g G1Jac
@@ -190,9 +188,6 @@ func TestG1AffineConversions(t *testing.T) {
 			return op1.X.Equal(&one) && op1.Y.Equal(&one) && op1.Z.Equal(&zero)
 		},
 	))
-
-
-
 
 	properties.Property("[BLS12-377] [Jacobian] Two representatives of the same class should be equal", prop.ForAll(
 		func(a, b fp.Element) bool {
@@ -265,8 +260,6 @@ func TestG1AffineOps(t *testing.T) {
 		},
 		GenFp(),
 	))
-
-	
 
 	properties.Property("[BLS12-377] [Jacobian] Addmix the negation to itself should output 0", prop.ForAll(
 		func(a fp.Element) bool {
@@ -595,7 +588,6 @@ func fuzzG1Jac(p *G1Jac, f fp.Element) G1Jac {
 	res.Z.Mul(&p.Z, &f)
 	return res
 }
-
 
 func TestBatchAffineConv(t *testing.T) {
 	var points [5]G1Affine

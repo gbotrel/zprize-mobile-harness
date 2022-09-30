@@ -162,7 +162,6 @@ func partitionScalars(scalars []fr.Element, c uint64, scalarsMont bool, nbTasks 
 	return toReturn, smallValues
 }
 
-
 // MultiExp implements section 4 of https://eprint.iacr.org/2012/549.pdf
 //
 // This call return an error if len(scalars) != len(points) or if provided config is invalid.
@@ -229,7 +228,7 @@ func (p *G1EdExtended) MultiExp(points []G1EdMSM, scalars []fr.Element, config e
 		// if C > 16 && nbPoints < 1 << 23 {
 		// 	C = 16
 		// }
-		return C 
+		return C
 	}
 
 	var C uint64

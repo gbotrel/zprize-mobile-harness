@@ -531,7 +531,6 @@ func (p *G1Jac) ClearCofactor(a *G1Jac) *G1Jac {
 
 }
 
-
 // BatchJacobianToAffineG1 converts points in Jacobian coordinates to Affine coordinates
 // performing a single field inversion (Montgomery batch inversion trick).
 func BatchJacobianToAffineG1(points []G1Jac) []G1Affine {
