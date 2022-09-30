@@ -110,7 +110,6 @@ func BenchmarkElementInverse(b *testing.B) {
 
 }
 
-
 func BenchmarkElementExp(b *testing.B) {
 	var x Element
 	x.SetRandom()
@@ -642,7 +641,6 @@ func TestElementBitLen(t *testing.T) {
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
 
 }
-
 
 func TestElementLexicographicallyLargest(t *testing.T) {
 	t.Parallel()

@@ -54,11 +54,11 @@ func (p *G1Affine) Set(a *G1Affine) *G1Affine {
 	return p
 }
 
-// IsZero returns true if p=0 false otherwise
-func (p *G1Affine) IsZero() bool {
-	var one fp.Element
-	one.SetOne()
-	return p.X.IsZero() && p.Y.Equal(&one)
+// setInfinity sets p to O (0,0)
+func (p *G1Affine) setInfinity() *G1Affine {
+	p.X.SetZero()
+	p.Y.SetZero()
+	return p
 }
 
 // ScalarMultiplication computes and returns p = a ⋅ s
@@ -531,7 +531,6 @@ func (p *G1Jac) ClearCofactor(a *G1Jac) *G1Jac {
 
 }
 
-
 // BatchJacobianToAffineG1 converts points in Jacobian coordinates to Affine coordinates
 // performing a single field inversion (Montgomery batch inversion trick).
 func BatchJacobianToAffineG1(points []G1Jac) []G1Affine {
@@ -694,6 +693,11 @@ func BatchScalarMultiplicationG1(base *G1Affine, scalars []fr.Element) []G1Affin
 // FromAffine sets p = a, p in twisted Edwards (extended), a in Short Weierstrass (affine)
 func (p *G1EdExtended) FromAffineSW(a *G1Affine) *G1EdExtended {
 
+	if a.IsInfinity() {
+		p.setInfinity()
+		return p
+	}
+
 	var d1, d2, one fp.Element
 	one.SetOne()
 
@@ -722,12 +726,17 @@ func BatchFromAffineSW(a []G1Affine) []G1EdExtended {
 
 	p := make([]G1EdExtended, len(a))
 	d := make([]fp.Element, 2*len(a))
+	zeroes := make([]bool, len(a))
 
 	var one fp.Element
 	one.SetOne()
 
 	Execute(len(a), func(start, end int) {
 		for i := start; i < end; i++ {
+			if a[i].IsInfinity() {
+				zeroes[i] = true
+				continue
+			}
 			d[i].Mul(&a[i].Y, &invSqrtMinusA)
 			d[i+len(a)].Add(&a[i].X, &one).
 				Add(&d[i+len(a)], &sqrtThree)
@@ -738,6 +747,10 @@ func BatchFromAffineSW(a []G1Affine) []G1EdExtended {
 
 	Execute(len(a), func(start, end int) {
 		for i := start; i < end; i++ {
+			if zeroes[i] {
+				p[i].setInfinity()
+				continue
+			}
 			p[i].X.Add(&a[i].X, &one).
 				Mul(&p[i].X, &inv[i])
 			p[i].Y.Add(&a[i].X, &one).
@@ -759,12 +772,17 @@ func BatchFromAffineSWC(a []G1Affine) []G1EdMSM {
 
 	p := make([]G1EdMSM, len(a))
 	d := make([]fp.Element, 2*len(a))
+	zeroes := make([]bool, len(a))
 
 	var one fp.Element
 	one.SetOne()
 
 	Execute(len(a), func(start, end int) {
 		for i := start; i < end; i++ {
+			if a[i].IsInfinity() {
+				zeroes[i] = true
+				continue
+			}
 			d[i].Mul(&a[i].Y, &invSqrtMinusA)
 			d[i+len(a)].Add(&a[i].X, &one).
 				Add(&d[i+len(a)], &sqrtThree)
@@ -776,6 +794,10 @@ func BatchFromAffineSWC(a []G1Affine) []G1EdMSM {
 	Execute(len(a), func(start, end int) {
 		var x, y, t fp.Element
 		for i := start; i < end; i++ {
+			if zeroes[i] {
+				p[i].setInfinity()
+				continue
+			}
 			x.Add(&a[i].X, &one).
 				Mul(&x, &inv[i])
 			y.Add(&a[i].X, &one).
@@ -860,6 +882,14 @@ func (p *G1EdExtended) setInfinity() *G1EdExtended {
 	p.X.SetZero()
 	p.Y.SetOne()
 	p.Z.SetOne()
+	p.T.SetZero()
+	return p
+}
+
+// setInfinity sets p to O (1:1:2d)
+func (p *G1EdMSM) setInfinity() *G1EdMSM {
+	p.X.SetOne()
+	p.Y.SetOne()
 	p.T.SetZero()
 	return p
 }

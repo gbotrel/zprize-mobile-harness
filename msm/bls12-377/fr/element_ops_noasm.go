@@ -44,7 +44,6 @@ func MulBy13(x *Element) {
 
 // TODO @gbotrel arm64 is defined in asm, butn ot all target will work, need to update build tags
 
-
 func fromMont(z *Element) {
 	_fromMontGeneric(z)
 }

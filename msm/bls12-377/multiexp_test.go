@@ -55,6 +55,13 @@ func TestMultiExpG1(t *testing.T) {
 		g.AddAssign(&g1Gen)
 	}
 
+	// sprinkle some points at infinity
+	samplePoints[0].setInfinity()
+	samplePoints[17].setInfinity()
+	samplePoints[34].setInfinity()
+	samplePoints[3].setInfinity()
+	samplePoints[72].setInfinity()
+
 	// final scalar to use in double and add method (without mixer factor)
 	// n(n+1)(2n+1)/6  (sum of the squares from 1 to n)
 	var scalar big.Int
@@ -92,7 +99,7 @@ func TestMultiExpG1(t *testing.T) {
 		genScalar,
 	))
 
-	cRange := []uint64{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 21}
+	cRange := []uint64{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	if testing.Short() {
 		// test only "odd" and "even" (ie windows size divide word size vs not)
 		cRange = []uint64{5, 16}
