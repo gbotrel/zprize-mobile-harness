@@ -55,6 +55,13 @@ func TestMultiExpG1(t *testing.T) {
 		g.AddAssign(&g1Gen)
 	}
 
+	// sprinkle some points at infinity
+	samplePoints[0].setInfinity()
+	samplePoints[17].setInfinity()
+	samplePoints[34].setInfinity()
+	samplePoints[3].setInfinity()
+	samplePoints[72].setInfinity()
+
 	// final scalar to use in double and add method (without mixer factor)
 	// n(n+1)(2n+1)/6  (sum of the squares from 1 to n)
 	var scalar big.Int
